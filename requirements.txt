@@ -1,0 +1,7 @@
+numpy
+scipy
+matplotlib
+pillow
+jarvis-tools
+agapi
+httpx

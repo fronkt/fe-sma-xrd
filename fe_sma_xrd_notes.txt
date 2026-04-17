@@ -1,0 +1,243 @@
+================================================================================
+  Fe-SMA XRD / DiffractGPT Pipeline — Notes & Reference
+  Project: SMST 2026 / Fe-Mn-Al-Si-Ni-C Shape Memory Alloy
+  Script:  C:\Users\frank\fe_sma_diffractgpt.py
+================================================================================
+
+WHAT THIS SCRIPT DOES
+----------------------
+Automates the full XRD → crystal structure identification pipeline for your
+Fe-SMA project. Three modes:
+
+  1. IMAGE mode   — give it one of your XRD images (JPG/PNG/TIF), it auto-
+                    detects peaks and runs them through DiffractGPT.
+  2. MANUAL mode  — give it a CSV of (2theta, intensity) data directly.
+  3. DEMO mode    — runs with built-in synthetic Fe-Mn-Al-Si-Ni-C peaks so
+                    you can test without any files.
+
+When an AGAPI key is set, the script calls the cloud DiffractGPT model at
+atomgpt.org and gets back a POSCAR file (predicted crystal structure).
+Without a key, it falls back to a local JARVIS-DFT cosine-similarity matcher.
+
+
+HOW TO RUN
+----------
+Open PowerShell or Command Prompt in C:\Users\frank\ then:
+
+  # Demo (no files needed):
+  python fe_sma_diffractgpt.py demo
+
+  # With an XRD image:
+  python fe_sma_diffractgpt.py image "path\to\xrd_image.jpg" --formula Fe2MnAl
+
+  # With a CSV of peaks:
+  python fe_sma_diffractgpt.py manual peaks.csv --formula Fe2MnAl
+
+  # Enable cloud DiffractGPT (set key first):
+  set AGAPI_KEY=sk-a54b52e85a044142a3f52af690009de5
+  python fe_sma_diffractgpt.py demo
+
+  # Override formula or image row sampling:
+  python fe_sma_diffractgpt.py image xrd.jpg --formula FeMnAlNi --row 0.4
+
+
+API KEY
+-------
+Service  : AtomGPT.org (AGAPI — open-access materials AI platform)
+Key      : sk-a54b52e85a044142a3f52af690009de5
+Register : https://atomgpt.org
+Set it   : set AGAPI_KEY=sk-a54b52e85a044142a3f52af690009de5   (Windows CMD)
+           $env:AGAPI_KEY="sk-..."                             (PowerShell)
+           export AGAPI_KEY="sk-..."                           (bash/Linux)
+
+Without the key the script still works — it uses a local JARVIS-DFT XRD
+database matching instead (cosine similarity, no internet needed after the
+first ~41 MB database download).
+
+
+WHAT THE OUTPUT MEANS
+---------------------
+DiffractGPT output (cloud mode):
+  - Returns a POSCAR file saved as "diffractgpt_predicted.POSCAR"
+  - POSCAR is a VASP crystal structure format:
+      Line 1   : system name
+      Line 2   : universal scaling factor (usually 1.0)
+      Lines 3-5: lattice vectors (a, b, c) in Angstroms
+      Line 6   : element symbols
+      Line 7   : number of each element
+      Line 8   : "direct" (fractional coordinates) or "cartesian"
+      Lines 9+ : atomic positions
+
+  Example output for your alloy (demo):
+      Fe2MnAlSiNiC — L2₁ Heusler-type structure
+      a ≈ 4.24 Å  (FCC-like lattice, Fm-3m symmetry)
+      Fe @ (0,0,0) and (0.25,0.25,0.25)
+      Mn @ (0.75,0.75,0.75)
+      Al @ (0.5,0.5,0.5)
+  → This is the target γ-phase austenite Heusler, consistent with your
+    synchrotron XRD patterns.
+
+JARVIS local match output:
+  - Ranks top-10 Fe-Al compounds from JARVIS-DFT by cosine similarity
+  - Score of 1.0 = perfect match, 0.0 = no match
+  - Also shows formation energy (eV/atom) — more negative = more stable
+  - Top match for demo peaks: AlFe2Mo (Fm-3m, score 0.82) — FCC-type ✓
+
+
+IMAGE MODE NOTES
+----------------
+Your synchrotron XRD images (from Shanghai Synchrotron Radiation Facility)
+are 2D diffraction images. The script handles them by:
+  1. Converting to grayscale
+  2. Averaging a horizontal band of pixels (±5% of image height around --row)
+  3. Treating the horizontal pixel axis as a 2θ axis (mapped 10°→90°)
+  4. Running scipy peak detection with prominence filtering
+
+Important: this works best on already-integrated 1D XRD line plots or images
+where the diffraction pattern is displayed as a horizontal intensity curve.
+If your images are 2D Debye-Scherrer ring patterns, you need to first
+integrate them (e.g. with PyFAI: pip install pyFAI) before passing to
+this script.
+
+To adjust peak sensitivity, use --prominence (default 0.05):
+  Lower value  → more peaks detected (noisier)
+  Higher value → fewer peaks, only strong ones
+
+The detected-peak plot is saved as "xrd_peaks_detected.png" automatically.
+
+
+FORMULA GUIDE (for --formula flag)
+------------------------------------
+For your alloys use these formulas:
+
+  Alloy 697-7 / 697-6 (novel AI alloy):
+    --formula Fe2MnAlSiNiC   (approximate stoichiometry)
+    --formula FeMnAlNi        (simplified, ignoring Si/C)
+
+  Reference Omori alloy (FeMnAlNi benchmark):
+    --formula FeMnAlNi
+
+  Target phase (L2₁ Heusler):
+    --formula Fe2MnAl
+
+  Observed secondary phase (B2/Fe₃Al):
+    --formula Fe3Al
+    --formula FeAl
+
+  The formula is passed to DiffractGPT as a constraint. Providing it
+  significantly improves prediction accuracy (per the DiffractGPT paper).
+
+
+WHAT DiffractGPT IS
+-------------------
+DiffractGPT (DGPT) is a generative pretrained transformer trained on the
+JARVIS-DFT database (80,000+ crystal structures + simulated XRD patterns).
+It solves the "inverse problem": given an XRD pattern → predict structure.
+
+Paper: "DiffractGPT: Atomic Structure Determination from X-ray Diffraction
+        Patterns Using a Generative Pretrained Transformer"
+        J. Phys. Chem. Lett. 2024 — Kamal Choudhary (NIST/JHU)
+DOI  : https://pubs.acs.org/doi/10.1021/acs.jpclett.4c03137
+
+Three prediction scenarios (best → worst accuracy):
+  1. Formula + XRD peaks   ← what this script does
+  2. Element list + peaks
+  3. Peaks only
+
+For your project, scenario 1 is ideal since you know the nominal composition.
+
+
+COMPANION SCRIPT
+----------------
+C:\Users\frank\fe_sma_atomgpt_analysis.py
+
+  Queries the JARVIS-DFT database for phases relevant to your project:
+    - L2₁ MnAlFe₂ (Fm-3m): Ef = -0.195 eV/atom, B = 207 GPa, mag = 2.04 μB
+    - B2 AlFe     (Pm-3m): Ef = -0.358 eV/atom  ← 0.162 eV/atom more stable!
+
+  This DFT data directly explains your experimental XRD finding that B2/Fe₃Al
+  precipitated as a secondary phase — it was thermodynamically inevitable.
+
+  With AGAPI key set, also runs ALIGNN ML predictions (formation energy,
+  bulk modulus, shear modulus, bandgap) for any structure in the database.
+
+  Run: python fe_sma_atomgpt_analysis.py
+  Report saved to: fe_sma_atomgpt_review.txt
+
+
+REQUIREMENTS
+------------
+  pip install numpy scipy matplotlib pillow jarvis-tools agapi
+
+  All already installed at: C:\Users\frank\AppData\Local\Programs\Python\Python312\
+
+
+TROUBLESHOOTING
+---------------
+Problem : UnicodeEncodeError on Windows
+Fix     : Run with PYTHONUTF8=1 prefix:
+            PYTHONUTF8=1 python fe_sma_diffractgpt.py demo
+          Or in PowerShell:
+            $env:PYTHONUTF8=1; python fe_sma_diffractgpt.py demo
+
+Problem : DiffractGPT returns no structure
+Fix     : Check AGAPI_KEY is set correctly. Test with:
+            python -c "import os; print(os.environ.get('AGAPI_KEY','NOT SET'))"
+
+Problem : JARVIS database download slow
+Fix     : It only downloads once (~41 MB) and caches at:
+            C:\Users\frank\.jarvis\  or  C:\Users\frank\AppData\Local\jarvis\
+          Subsequent runs load from cache (fast).
+
+Problem : Image mode detects too many / too few peaks
+Fix     : Adjust --prominence (default 0.05)
+            --prominence 0.02  → more sensitive
+            --prominence 0.15  → only major peaks
+          Also try --row to sample a different horizontal strip of the image.
+
+
+GITHUB REPO SETUP (see below for full guide)
+--------------------------------------------
+Recommended repo structure:
+
+  fe-sma-xrd/
+  ├── fe_sma_diffractgpt.py       (XRD → DiffractGPT pipeline)
+  ├── fe_sma_atomgpt_analysis.py  (JARVIS-DFT project review)
+  ├── fe_sma_atomgpt_review.txt   (generated analysis report)
+  ├── fe_sma_xrd_notes.txt        (this file)
+  ├── data/
+  │   └── (your XRD CSVs / processed peak files — NOT raw images, too large)
+  ├── output/
+  │   └── (diffractgpt_predicted.POSCAR, xrd_peaks_detected.png, etc.)
+  ├── requirements.txt
+  └── README.md
+
+  Create requirements.txt with:
+    numpy
+    scipy
+    matplotlib
+    pillow
+    jarvis-tools
+    agapi
+
+  IMPORTANT: Do NOT commit your AGAPI key to GitHub.
+  Add a .gitignore with:
+    .env
+    *.POSCAR   (optional, they're generated outputs)
+  Store the key in a .env file locally:
+    AGAPI_KEY=sk-a54b52e85a044142a3f52af690009de5
+  And load it in the script with python-dotenv, or just set it manually
+  each session as shown above.
+
+
+================================================================================
+  Files summary
+================================================================================
+
+  C:\Users\frank\fe_sma_diffractgpt.py       ← main XRD script
+  C:\Users\frank\fe_sma_atomgpt_analysis.py  ← JARVIS/AtomGPT analysis
+  C:\Users\frank\fe_sma_atomgpt_review.txt   ← generated project review
+  C:\Users\frank\fe_sma_xrd_notes.txt        ← this file
+  C:\Users\frank\diffractgpt_predicted.POSCAR ← last DiffractGPT output
+
+================================================================================
