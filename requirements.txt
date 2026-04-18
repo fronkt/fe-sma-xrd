@@ -14,7 +14,3 @@ matminer
 spglib
 mpcontribs-client
 optimade-client
-
-# GNoME pipeline
-chgnet
-matgl
