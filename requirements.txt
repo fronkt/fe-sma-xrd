@@ -5,3 +5,16 @@ pillow
 jarvis-tools
 agapi
 httpx
+
+# Materials science ecosystem
+pymatgen
+ase
+mp-api
+matminer
+spglib
+mpcontribs-client
+optimade-client
+
+# GNoME pipeline
+chgnet
+matgl
