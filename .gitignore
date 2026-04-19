@@ -4,3 +4,4 @@ __pycache__/
 *.egg-info/
 .jarvis/
 xrd_peaks_detected.png
+!results/**/*.png
