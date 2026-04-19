@@ -5,3 +5,5 @@ __pycache__/
 .jarvis/
 xrd_peaks_detected.png
 !results/**/*.png
+fe_sma_xrd_notes.txt
+
