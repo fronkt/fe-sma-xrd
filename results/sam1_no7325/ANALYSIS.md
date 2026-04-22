@@ -55,16 +55,23 @@ python fe_sma_diffractgpt.py manual "G:\synchrotron.chi\Sam1-NO7325.chi" \
 
 ## Detected Peaks
 
-| Synchrotron 2θ (°) | Cu Kα equiv. 2θ (°) | Rel. Intensity (%) | Likely Reflection |
-|--------------------|----------------------|--------------------|-------------------|
-| ~0.76 | 9.30 | 15.9 | low-angle, possible superstructure |
-| ~3.52 | 43.01 | 57.4 | FCC/L2₁ (111) |
-| ~3.62 | **44.28** | **100.0** | B2 (110) — strongest peak |
-| ~4.10 | 50.04 | 77.2 | B2/FCC (200) |
-| ~5.28 | 64.37 | 13.6 | (220) |
-| ~6.02 | 73.49 | 21.3 | (311) |
-| ~6.68 | 81.52 | 28.8 | (222) |
-| ~7.34 | 89.11 | 20.7 | — |
+| Synchrotron 2θ (°) | Cu Kα equiv. 2θ (°) | d-spacing (Å) | Rel. Intensity (%) | hkl (B2 / L2₁) | Phase |
+|--------------------|----------------------|--------------|--------------------|--------------------|-------|
+| ~0.76 | 9.30 | ~9.50 | 15.9 | — | possible superstructure / artifact |
+| ~3.52 | 43.01 | 2.103 | 57.4 | (111) / — | **FCC γ-austenite (111)** [a≈3.643 Å] |
+| ~3.62 | **44.28** | **2.046** | **100.0** | **(110) / (220)** | **B2 AlFe (110)** = L2₁ (220) — dominant |
+| ~4.10 | 50.04 | 1.822 | 77.2 | (200) / (400) | **FCC γ (200)** [a≈3.644 Å] |
+| ~5.28 | 64.37 | 1.447 | 13.6 | **(200) / (400)** | **B2 AlFe (200)** [a≈2.894 Å] |
+| ~6.02 | 73.49 | 1.287 | 21.3 | **(210) / (420)** | **FCC γ (220)** [a≈3.638 Å] / L2₁ (420) |
+| ~6.68 | 81.52 | 1.178 | 28.8 | **(211) / (422)** | **B2 AlFe (211)** [a≈2.892 Å] = L2₁ (422) |
+| ~7.34 | 89.11 | 1.088 | 20.7 | — | weak / unassigned |
+
+> **Note on hkl labels:** The three higher-angle peaks were previously labeled (220), (311), (222) in error.
+> Correct indexing based on d-spacing (λ=1.54056 Å) against B2 AlFe (a≈2.894 Å) and FCC γ (a≈3.641 Å):
+> - 64.37° → d=1.447 Å → **B2 (200)** / L2₁ (400)
+> - 73.49° → d=1.287 Å → **FCC γ (220)** / L2₁ (420)
+> - 81.52° → d=1.178 Å → **B2 (211)** / L2₁ (422)
+> Full Rietveld refinement in GSAS-II is needed to deconvolute overlapping B2 / L2₁ / FCC γ contributions.
 
 ## JARVIS-DFT Match Results
 

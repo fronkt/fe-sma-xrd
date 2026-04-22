@@ -193,23 +193,87 @@ def run_diffractgpt_api(formula: str, peaks_text: str, api_key: str) -> str | No
         return None
 
 
+# Reference d-spacing windows for Fe-SMA phases (Cu Kα, λ=1.54056 Å).
+# Tuples: (d_min Å, d_max Å, short label, color)
+_PHASE_REFS = [
+    (2.07, 2.15, "FCC γ (111)",        "#e07b39"),
+    (1.98, 2.07, "B2 (110)\nL2₁(220)", "#2ca02c"),
+    (1.78, 1.87, "FCC γ (200)",        "#e07b39"),
+    (1.42, 1.46, "B2 (200)\nL2₁(400)", "#2ca02c"),
+    (1.27, 1.30, "FCC γ (220)\nL2₁(420)", "#9467bd"),
+    (1.16, 1.19, "B2 (211)\nL2₁(422)", "#2ca02c"),
+]
+
+
+def label_phases(peak_2theta_cuka: np.ndarray) -> list[tuple[str, str]]:
+    """Return (label, color) for each Cu Kα 2θ peak from d-spacing matching."""
+    out = []
+    for t in peak_2theta_cuka:
+        d = CUKA / (2 * np.sin(np.deg2rad(t / 2)))
+        lbl, col = f"d={d:.3f}Å", "gray"
+        for d_min, d_max, name, color in _PHASE_REFS:
+            if d_min <= d <= d_max:
+                lbl, col = name, color
+                break
+        out.append((lbl, col))
+    return out
+
+
 def plot_xrd(two_theta: np.ndarray, intensity: np.ndarray,
              peak_2theta: np.ndarray, peak_intensity: np.ndarray,
-             title: str = "XRD Profile with Detected Peaks"):
+             title: str = "XRD Profile with Detected Peaks",
+             cuka_peaks: np.ndarray | None = None):
+    """Plot XRD profile with detected peaks.
+
+    Args:
+        cuka_peaks: Cu Kα equivalent 2θ values used for phase labeling. If
+                    provided, each peak is annotated with its phase assignment
+                    derived from d-spacing matching. If None, only the angle is
+                    shown (raw synchrotron mode).
+    """
     import matplotlib
     matplotlib.use("Agg")  # non-interactive — saves file, no GUI window
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(12, 4))
+    fig, ax = plt.subplots(figsize=(14, 5))
     ax.plot(two_theta, intensity / intensity.max() * 100, lw=1.2, color="steelblue", label="Profile")
-    ax.scatter(peak_2theta, peak_intensity, color="red", zorder=5, label=f"{len(peak_2theta)} peaks")
-    for t, i in zip(peak_2theta, peak_intensity):
-        ax.annotate(f"{t:.1f}°", (t, i), textcoords="offset points", xytext=(0, 6),
-                    ha="center", fontsize=7, color="darkred")
+    ax.scatter(peak_2theta, peak_intensity, color="red", zorder=5, s=40, label=f"{len(peak_2theta)} peaks")
+
+    phases = label_phases(cuka_peaks) if cuka_peaks is not None else None
+
+    for idx, (t, i) in enumerate(zip(peak_2theta, peak_intensity)):
+        if phases:
+            lbl, col = phases[idx]
+            ax.annotate(
+                f"{t:.2f}°\n{lbl}",
+                (t, i),
+                textcoords="offset points",
+                xytext=(0, 8),
+                ha="center",
+                fontsize=6.5,
+                color=col,
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=col, alpha=0.75, lw=0.6),
+            )
+        else:
+            ax.annotate(f"{t:.1f}°", (t, i), textcoords="offset points", xytext=(0, 6),
+                        ha="center", fontsize=7, color="darkred")
+
+    if phases:
+        from matplotlib.patches import Patch
+        seen = {}
+        for lbl, col in phases:
+            seen.setdefault(lbl, col)
+        legend_handles = [ax.lines[0], ax.collections[0]]
+        for lbl, col in seen.items():
+            legend_handles.append(Patch(facecolor=col, edgecolor=col, alpha=0.6, label=lbl))
+        ax.legend(handles=legend_handles, fontsize=7, loc="upper right",
+                  title="Phase key", title_fontsize=7)
+    else:
+        ax.legend()
+
     ax.set_xlabel("2θ (degrees)")
     ax.set_ylabel("Relative Intensity (%)")
     ax.set_title(title)
-    ax.legend()
     plt.tight_layout()
     out = "xrd_peaks_detected.png"
     plt.savefig(out, dpi=150)
@@ -271,10 +335,6 @@ def main():
         # Peak detection on full profile
         peak_2theta_raw, peak_intensity_raw = detect_peaks(two_theta_raw, intensity_raw, args.prominence)
 
-        # Plot raw synchrotron profile
-        plot_xrd(two_theta_raw, intensity_raw, peak_2theta_raw, peak_intensity_raw,
-                 title=f"XRD -- {Path(args.input).name}")
-
         # Convert synchrotron 2th -> Cu Ka 2th if wavelength provided
         if args.wavelength and args.wavelength != CUKA:
             print(f"Converting synchrotron 2th (lam={args.wavelength} A) -> Cu Ka 2th (lam={CUKA} A)...")
@@ -284,9 +344,16 @@ def main():
             peak_intensity = peak_intensity_raw[valid]
             print(f"  Synchrotron range: {peak_2theta_raw.min():.3f}-{peak_2theta_raw.max():.3f} deg")
             print(f"  Cu Ka equivalent:  {peak_2theta.min():.2f}-{peak_2theta.max():.2f} deg")
+            # Plot synchrotron profile with Cu Kα-equivalent peak positions and phase labels
+            plot_xrd(two_theta_raw, intensity_raw, peak_2theta_raw, peak_intensity_raw,
+                     title=f"XRD — {Path(args.input).name} (synch. 2θ, peaks labeled in Cu Kα equiv.)",
+                     cuka_peaks=peak_2theta)
         else:
             peak_2theta = peak_2theta_raw
             peak_intensity = peak_intensity_raw
+            plot_xrd(two_theta_raw, intensity_raw, peak_2theta_raw, peak_intensity_raw,
+                     title=f"XRD — {Path(args.input).name}",
+                     cuka_peaks=peak_2theta_raw)
 
     print(f"\nDetected {len(peak_2theta)} peaks for formula {args.formula}:")
     for t, i in zip(peak_2theta, peak_intensity):
